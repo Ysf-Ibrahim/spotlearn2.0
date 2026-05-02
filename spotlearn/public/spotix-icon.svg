@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Black background circle -->
+  <circle cx="50" cy="50" r="48" fill="#0a0a0a"/>
+
+  <!-- White targeting arcs (N, E, S, W each ~80°) -->
+  <!-- North arc: from 230° to 310° (clockwise) -->
+  <path d="M 29.4,25.5 A 32,32 0 0,1 70.6,25.5"
+    fill="none" stroke="white" stroke-width="6.5" stroke-linecap="round"/>
+  <!-- East arc: from 320° to 40° (clockwise) -->
+  <path d="M 74.5,29.4 A 32,32 0 0,1 74.5,70.6"
+    fill="none" stroke="white" stroke-width="6.5" stroke-linecap="round"/>
+  <!-- South arc: from 50° to 130° (clockwise) -->
+  <path d="M 70.6,74.5 A 32,32 0 0,1 29.4,74.5"
+    fill="none" stroke="white" stroke-width="6.5" stroke-linecap="round"/>
+  <!-- West arc: from 140° to 220° (clockwise) -->
+  <path d="M 25.5,70.6 A 32,32 0 0,1 25.5,29.4"
+    fill="none" stroke="white" stroke-width="6.5" stroke-linecap="round"/>
+
+  <!-- Gold 4-pointed star in center -->
+  <path d="M 62,50 L 52.83,52.83 L 50,62 L 47.17,52.83 L 38,50 L 47.17,47.17 L 50,38 L 52.83,47.17 Z"
+    fill="#F5A623"/>
+</svg>
