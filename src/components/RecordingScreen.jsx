@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Component, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronLeft, ChevronRight, X, ArrowLeft, Loader2,
-  Mic, Volume2, Camera, Flag, StopCircle,
+  Mic, Volume2, Camera, Flag, StopCircle, AlertTriangle,
 } from "lucide-react";
 
 // ── pdf.js via CDN ────────────────────────────────────────────────────────────
@@ -17,29 +17,42 @@ function loadPdfJs() {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_CDN;
       resolve(window.pdfjsLib);
     };
-    s.onerror = () => reject(new Error("Failed to load pdf.js from CDN"));
+    s.onerror = () => reject(new Error("pdf.js CDN load failed"));
     document.head.appendChild(s);
   });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatTime(total) {
-  const h = Math.floor(total / 3600).toString().padStart(2, "0");
-  const m = Math.floor((total % 3600) / 60).toString().padStart(2, "0");
-  const s = (total % 60).toString().padStart(2, "0");
+function formatTime(totalSec) {
+  const h = Math.floor(totalSec / 3600).toString().padStart(2, "0");
+  const m = Math.floor((totalSec % 3600) / 60).toString().padStart(2, "0");
+  const s = (totalSec % 60).toString().padStart(2, "0");
   return `${h}:${m}:${s}`;
 }
-function formatTs(total) {
-  const m = Math.floor(total / 60).toString().padStart(2, "0");
-  const s = (total % 60).toString().padStart(2, "0");
+function formatTs(totalSec) {
+  const m = Math.floor(totalSec / 60).toString().padStart(2, "0");
+  const s = (totalSec % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
+// Parse "MM:SS" timestamp string → total seconds
+function tsToSec(ts = "00:00") {
+  const parts = ts.split(":").map(Number);
+  return parts.length === 2 ? parts[0] * 60 + parts[1]
+       : parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+       : 0;
+}
+
+// ── Per-lecture speed multiplier ──────────────────────────────────────────────
+// speedMult: real 1 second → simMult simulated seconds
+const LECTURE_SPEED = {
+  "Lecture 01 Embedded System": 3,
+  // all others default to 1
+};
+function getSpeed(label) { return LECTURE_SPEED[label] ?? 1; }
 
 // ── Transcript data per lecture ───────────────────────────────────────────────
-// interval: ms between each new line   statusLabel: badge shown while running
 const TRANSCRIPTS = {
   "Lecture 01 Embedded System": {
-    interval: 2500,
     statusLabel: "Generating transcript live…",
     lines: [
       { ts: "00:00", text: "Welcome to Lecture 01. Today we're going to look at what an embedded system actually is." },
@@ -70,7 +83,6 @@ const TRANSCRIPTS = {
   },
 
   "Lecture 05 Programming microcontroller C": {
-    interval: 5000,
     statusLabel: "Listening…",
     lines: [
       { ts: "00:00", text: "Alright everyone, today we're going to look at programming the PIC microcontroller using embedded C." },
@@ -101,7 +113,7 @@ const TRANSCRIPTS = {
   },
 };
 
-// ── Flagged moment card meta ──────────────────────────────────────────────────
+// ── Flagged moment card ───────────────────────────────────────────────────────
 const MOMENT_META = {
   last30s:  { title: "Audio Segment Saved",  label: "Last 30 seconds", icon: Volume2, isAudio: true  },
   last1m:   { title: "Audio Segment Saved",  label: "Last 1 minute",   icon: Volume2, isAudio: true  },
@@ -109,148 +121,193 @@ const MOMENT_META = {
 };
 
 function FlaggedCard({ moment }) {
-  const meta = MOMENT_META[moment.type];
+  const meta = MOMENT_META[moment.type] ?? MOMENT_META.snapshot;
   const Icon = meta.icon;
   return (
     <div className="rounded-xl border border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/20 transition-all p-3 mb-2 last:mb-0">
       <div className="flex items-start gap-2.5">
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-          meta.isAudio ? "bg-blue-50" : "bg-indigo-50"
-        }`}>
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${meta.isAudio ? "bg-blue-50" : "bg-indigo-50"}`}>
           <Icon size={13} className={meta.isAudio ? "text-blue-500" : "text-indigo-500"} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1 mb-0.5">
             <p className="text-xs font-semibold text-gray-800 truncate">{meta.title}</p>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 ${
-              meta.isAudio ? "bg-blue-50 text-blue-500" : "bg-indigo-50 text-indigo-500"
-            }`}>
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 ${meta.isAudio ? "bg-blue-50 text-blue-500" : "bg-indigo-50 text-indigo-500"}`}>
               {meta.label}
             </span>
           </div>
           <p className="text-[10px] text-gray-500 mb-1">
-            Slide {moment.slideNumber}{moment.totalSlides ? ` / ${moment.totalSlides}` : ""}
+            Slide {moment.slideNumber ?? "—"}{moment.totalSlides ? ` / ${moment.totalSlides}` : ""}
           </p>
           {meta.isAudio ? (
             <div className="flex items-center gap-1 text-[10px] font-mono text-blue-600 bg-blue-50 rounded-md px-2 py-0.5 w-fit">
-              <span>{moment.fromTs}</span>
+              <span>{moment.fromTs ?? "00:00"}</span>
               <span className="text-blue-300">→</span>
-              <span>{moment.toTs}</span>
+              <span>{moment.toTs ?? "00:00"}</span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-10 h-7 rounded bg-gray-100 border border-gray-200 flex items-center justify-center text-[8px] text-gray-400 font-bold shrink-0">
-                S{moment.slideNumber}
+                S{moment.slideNumber ?? "?"}
               </div>
               <span className="text-[10px] text-gray-400 leading-snug">Snapshot saved from current slide</span>
             </div>
           )}
-          <p className="text-[9px] text-gray-400 mt-1.5">@ {moment.toTs} · Student marked for review</p>
+          <p className="text-[9px] text-gray-400 mt-1.5">@ {moment.toTs ?? "00:00"} · Student marked for review</p>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
+// ── Error boundary ────────────────────────────────────────────────────────────
+class RecordingErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err) { console.error("[SpotLearn] RecordingScreen crashed:", err); }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 gap-4 p-8 text-center bg-white">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+          <AlertTriangle size={24} className="text-amber-500" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800 mb-1">Something went wrong in the recording view.</p>
+          <p className="text-xs text-gray-500">Please restart the recording.</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={this.props.onBack}
+            className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+            Back to Lecture
+          </button>
+          <button onClick={this.props.onClose}
+            className="px-4 py-2 rounded-xl bg-[#2F3D56] text-white text-sm font-semibold hover:bg-[#263347] transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ── Inner recording component ─────────────────────────────────────────────────
+function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   const canvasRef        = useRef(null);
   const containerRef     = useRef(null);
   const renderTaskRef    = useRef(null);
   const transcriptEndRef = useRef(null);
   const toastTimerRef    = useRef(null);
-  const isStoppedRef     = useRef(false); // readable by intervals without stale closure
+  const mountedRef       = useRef(true);    // prevent setState after unmount
   const firstSlideRef    = useRef(1);
+  const prevLineCountRef = useRef(0);       // for auto-scroll diff
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const speedMult    = getSpeed(lecture?.label ?? "");
+  const transcriptCfg = TRANSCRIPTS[lecture?.label ?? ""] ?? null;
+  const hasTranscript = !!transcriptCfg;
 
   const [pdfDoc,         setPdfDoc]         = useState(null);
   const [numPages,       setNumPages]        = useState(null);
   const [pageNumber,     setPageNumber]      = useState(1);
-  const [status,         setStatus]          = useState("loading");
-  const [seconds,        setSeconds]         = useState(0);
-  const [visibleLines,   setVisibleLines]    = useState([]);
+  const [pdfStatus,      setPdfStatus]       = useState("loading"); // loading | ready | error
+  const [simSeconds,     setSimSeconds]      = useState(0);          // single simulated clock
   const [flaggedMoments, setFlaggedMoments]  = useState([]);
   const [toast,          setToast]           = useState(null);
   const [isStopped,      setIsStopped]       = useState(false);
   const [showEndModal,   setShowEndModal]    = useState(false);
 
-  // Transcript config for this lecture (null if not available)
-  const transcriptData = TRANSCRIPTS[lecture.label] ?? null;
-  const hasTranscript  = !!transcriptData;
-
-  // Keep ref in sync so intervals can read current isStopped without stale closure
+  // Ref so the single interval can read isStopped without a stale closure
+  const isStoppedRef = useRef(false);
   useEffect(() => { isStoppedRef.current = isStopped; }, [isStopped]);
 
-  // ── Toast ─────────────────────────────────────────────────────
+  // ── Single simulated clock ──────────────────────────────────
+  // One interval, runs every real second, advances simSeconds by speedMult.
+  // This drives: timer display, transcript visibility, capture timestamps, saved duration.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!isStoppedRef.current && mountedRef.current) {
+        setSimSeconds((s) => s + speedMult);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  // speedMult never changes for a given lecture, safe to exclude from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Derive visible transcript lines from simSeconds ─────────
+  // No separate transcript interval — visibility is a pure function of simulated time.
+  const visibleLines = useMemo(() => {
+    if (!hasTranscript || !transcriptCfg?.lines) return [];
+    return transcriptCfg.lines.filter((line) => tsToSec(line.ts) <= simSeconds);
+  }, [simSeconds, hasTranscript, transcriptCfg]);
+
+  const transcriptDone = hasTranscript &&
+    visibleLines.length >= (transcriptCfg?.lines?.length ?? 0);
+
+  // ── Auto-scroll: trigger only when a NEW line appears ───────
+  useEffect(() => {
+    if (visibleLines.length > prevLineCountRef.current) {
+      prevLineCountRef.current = visibleLines.length;
+      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [visibleLines.length]);
+
+  // ── Toast helper ─────────────────────────────────────────────
   function showToast(msg) {
+    if (!mountedRef.current) return;
     setToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 2500);
+    toastTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setToast(null);
+    }, 2500);
   }
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
-  // ── Capture handler ───────────────────────────────────────────
+  // ── Capture handler ──────────────────────────────────────────
   function handleCapture(type) {
-    const toTs   = formatTs(seconds);
-    const fromTs = type === "last30s" ? formatTs(Math.max(0, seconds - 30))
-                 : type === "last1m"  ? formatTs(Math.max(0, seconds - 60))
+    const toTs   = formatTs(simSeconds);
+    const fromTs = type === "last30s" ? formatTs(Math.max(0, simSeconds - 30))
+                 : type === "last1m"  ? formatTs(Math.max(0, simSeconds - 60))
                  : null;
-    setFlaggedMoments((prev) => [
-      { id: Date.now(), type, toTs, fromTs, slideNumber: pageNumber, totalSlides: numPages },
-      ...prev,
-    ]);
-    const msg = type === "snapshot" ? "Snapshot saved to flagged moments" : "Saved to flagged moments";
-    showToast(msg);
+    const moment = {
+      id: Date.now(),
+      type,
+      toTs,
+      fromTs,
+      slideNumber:  pageNumber,
+      totalSlides:  numPages,
+    };
+    setFlaggedMoments((prev) => [moment, ...prev]);
+    showToast(type === "snapshot" ? "Snapshot saved to flagged moments" : "Saved to flagged moments");
   }
 
-  // ── End / Save flow ───────────────────────────────────────────
-  function handleEndClick()   { setShowEndModal(true); }
-  function handleCancelEnd()  { setShowEndModal(false); }
+  // ── End / Save flow ──────────────────────────────────────────
+  function handleEndClick()  { setShowEndModal(true); }
+  function handleCancelEnd() { setShowEndModal(false); }
   function handleSaveRecording() {
     setShowEndModal(false);
     setIsStopped(true);
-    onSave({
+    onSave?.({
       id:           Date.now(),
-      lectureLabel: lecture.label,
+      lectureLabel: lecture?.label ?? "Unknown lecture",
       savedAt:      new Date(),
       firstSlide:   firstSlideRef.current,
       lastSlide:    pageNumber,
-      duration:     seconds,
+      duration:     simSeconds,       // simulated duration
       flaggedCount: flaggedMoments.length,
     });
   }
 
-  // ── Timer ─────────────────────────────────────────────────────
+  // ── Load PDF ─────────────────────────────────────────────────
   useEffect(() => {
-    const id = setInterval(() => {
-      if (!isStoppedRef.current) setSeconds((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // ── Transcript simulation ─────────────────────────────────────
-  useEffect(() => {
-    if (!hasTranscript) return;
-    const { lines, interval } = TRANSCRIPTS[lecture.label];
-    setVisibleLines([lines[0]]);
-    let index = 1;
-    const id = setInterval(() => {
-      if (isStoppedRef.current)     { clearInterval(id); return; }
-      if (index >= lines.length)    { clearInterval(id); return; }
-      setVisibleLines((prev) => [...prev, lines[index]]);
-      index++;
-    }, interval);
-    return () => { clearInterval(id); setVisibleLines([]); };
-  }, [lecture.label, hasTranscript]); // re-initialises cleanly if lecture ever changes
-
-  // ── Auto-scroll transcript ────────────────────────────────────
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [visibleLines]);
-
-  // ── Load PDF ──────────────────────────────────────────────────
-  useEffect(() => {
+    if (!lecture?.pdfPath) { setPdfStatus("error"); return; }
     let cancelled = false;
-    setStatus("loading");
+    setPdfStatus("loading");
     setPdfDoc(null);
     setNumPages(null);
     setPageNumber(1);
@@ -259,24 +316,26 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
     loadPdfJs()
       .then((lib) => lib.getDocument(lecture.pdfPath).promise)
       .then((doc) => {
-        if (cancelled) return;
+        if (cancelled || !mountedRef.current) return;
         setPdfDoc(doc);
         setNumPages(doc.numPages);
-        setStatus("ready");
+        setPdfStatus("ready");
       })
-      .catch(() => { if (!cancelled) setStatus("error"); });
+      .catch(() => { if (!cancelled && mountedRef.current) setPdfStatus("error"); });
 
     return () => { cancelled = true; };
-  }, [lecture.pdfPath]);
+  }, [lecture?.pdfPath]);
 
   // ── Render PDF page ───────────────────────────────────────────
   const renderPage = useCallback(async (doc, pageNum, canvas, container) => {
-    if (!doc || !canvas) return;
-    if (renderTaskRef.current) renderTaskRef.current.cancel();
+    if (!doc || !canvas || !container) return;
+    if (renderTaskRef.current) {
+      try { renderTaskRef.current.cancel(); } catch { /* ignore */ }
+    }
     try {
       const page    = await doc.getPage(pageNum);
       const natural = page.getViewport({ scale: 1 });
-      const maxW    = (container?.clientWidth ?? 580) - 40;
+      const maxW    = Math.max((container.clientWidth ?? 400) - 40, 100);
       const scale   = Math.min(maxW / natural.width, 2.2);
       const vp      = page.getViewport({ scale });
       canvas.width  = vp.width;
@@ -284,41 +343,22 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
       const task    = page.render({ canvasContext: canvas.getContext("2d"), viewport: vp });
       renderTaskRef.current = task;
       await task.promise;
-    } catch { /* cancelled — ignore */ }
+    } catch { /* render cancelled or failed — safe to ignore */ }
   }, []);
 
   useEffect(() => {
-    if (status === "ready" && pdfDoc) {
+    if (pdfStatus === "ready" && pdfDoc && canvasRef.current && containerRef.current) {
       renderPage(pdfDoc, pageNumber, canvasRef.current, containerRef.current);
     }
-  }, [status, pdfDoc, pageNumber, renderPage]);
+  }, [pdfStatus, pdfDoc, pageNumber, renderPage]);
 
+  // ── Slide navigation ─────────────────────────────────────────
   const goPrev = () => setPageNumber((p) => Math.max(1, p - 1));
   const goNext = () => setPageNumber((p) => Math.min(numPages ?? p, p + 1));
 
-  const transcriptDone = hasTranscript &&
-    visibleLines.length >= TRANSCRIPTS[lecture.label].lines.length;
-
-  // ── Transcript panel status badge ─────────────────────────────
-  function TranscriptBadge() {
-    if (!hasTranscript) return null;
-    if (isStopped) return (
-      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Stopped</span>
-    );
-    if (transcriptDone) return (
-      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Completed</span>
-    );
-    return (
-      <span className="flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
-        {TRANSCRIPTS[lecture.label].statusLabel}
-      </span>
-    );
-  }
-
   return (
     <>
-      {/* ── Top bar ──────────────────────────────────────────────── */}
+      {/* ── Top bar ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-3 bg-[#2F3D56] rounded-t-2xl shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={onBack} title="Back to overview"
@@ -326,7 +366,7 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
             <ArrowLeft size={16} />
           </button>
           <span className="text-white font-semibold text-sm truncate max-w-[240px]">
-            {lecture.label}
+            {lecture?.label ?? "Recording"}
           </span>
         </div>
 
@@ -340,11 +380,16 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
               <span className="text-white/90 text-xs font-medium tracking-wide">Recording</span>
             </>
           ) : (
-            <span className="text-white/50 text-xs font-medium tracking-wide">Stopped</span>
+            <span className="text-white/50 text-xs font-medium">Stopped</span>
           )}
           <span className="font-mono text-white/70 text-xs bg-white/10 px-2 py-0.5 rounded-md ml-1 tabular-nums">
-            {formatTime(seconds)}
+            {formatTime(simSeconds)}
           </span>
+          {speedMult > 1 && (
+            <span className="text-[9px] font-bold bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-400/30">
+              ×{speedMult}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -361,50 +406,59 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
         </div>
       </div>
 
-      {/* ── Main content row ──────────────────────────────────────── */}
+      {/* ── Main content row ──────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
 
-        {/* ── PDF viewer (always shown) ── */}
+        {/* PDF viewer */}
         <div ref={containerRef}
           className="flex-1 overflow-auto bg-gray-100 flex flex-col items-center justify-start py-6 px-4 min-h-0">
-          {status === "loading" && (
+          {pdfStatus === "loading" && (
             <div className="flex flex-col items-center justify-center h-72 gap-3 text-gray-400">
               <Loader2 size={28} className="animate-spin" />
               <span className="text-sm">Loading slides…</span>
             </div>
           )}
-          {status === "error" && (
+          {pdfStatus === "error" && (
             <div className="flex flex-col items-center justify-center h-72 gap-2 text-gray-400 text-sm text-center">
               <span className="text-3xl">📄</span>
               <span>Could not load the PDF.</span>
-              <span className="text-xs">Check your internet connection and try again.</span>
+              <span className="text-xs">Check your internet connection.</span>
             </div>
           )}
-          {status === "ready" && (
+          {pdfStatus === "ready" && (
             <canvas ref={canvasRef} className="shadow-xl rounded-sm max-w-full" />
           )}
         </div>
 
-        {/* ── Right panel: Transcript + Flagged Moments (all lectures) ── */}
+        {/* Right panel: Transcript + Flagged Moments */}
         <div className="w-[300px] bg-white border-l border-gray-200 flex flex-col min-h-0 shrink-0">
 
-          {/* Transcript section */}
+          {/* Transcript */}
           <div className="flex-[3] flex flex-col min-h-0 border-b border-gray-200">
             <div className="px-4 py-2.5 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Mic size={12} className="text-[#2F3D56]" />
-                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">
-                    Live Transcript
-                  </span>
+                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">Live Transcript</span>
                 </div>
-                <TranscriptBadge />
+                {/* Status badge */}
+                {!hasTranscript ? null
+                  : isStopped ? (
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Stopped</span>
+                  ) : transcriptDone ? (
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Completed</span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
+                      {transcriptCfg?.statusLabel ?? "Listening…"}
+                    </span>
+                  )
+                }
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 py-2 min-h-0">
-              {/* No transcript available */}
-              {!hasTranscript && (
+              {!hasTranscript ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3">
                   <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
                     <Mic size={16} className="text-gray-400" />
@@ -413,10 +467,7 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
                     Live transcript simulation is not available for this lecture yet.
                   </p>
                 </div>
-              )}
-
-              {/* Transcript lines */}
-              {hasTranscript && (
+              ) : (
                 <div className="space-y-0.5">
                   {visibleLines.map((line, i) => {
                     const isNewest = !transcriptDone && !isStopped && i === visibleLines.length - 1;
@@ -427,15 +478,13 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
                         <span className="font-mono text-[9px] text-gray-400 shrink-0 mt-0.5 tabular-nums">
                           [{line.ts}]
                         </span>
-                        <span className={`leading-relaxed ${
-                          isNewest ? "text-blue-800 font-medium" : "text-gray-600"
-                        }`}>
+                        <span className={`leading-relaxed ${isNewest ? "text-blue-800 font-medium" : "text-gray-600"}`}>
                           {line.text}
                         </span>
                       </div>
                     );
                   })}
-                  {(transcriptDone || isStopped) && visibleLines.length > 0 && (
+                  {(transcriptDone || (isStopped && visibleLines.length > 0)) && (
                     <div className="flex items-center gap-2 px-2 py-2 mt-1 rounded-lg bg-gray-50 text-[10px] text-gray-400 border border-dashed border-gray-200">
                       <span>✓</span>
                       <span>{isStopped ? "Transcript stopped." : "Transcript simulation completed."}</span>
@@ -447,15 +496,13 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
             </div>
           </div>
 
-          {/* Flagged moments section */}
+          {/* Flagged moments */}
           <div className="flex-[2] flex flex-col min-h-0">
             <div className="px-4 py-2.5 shrink-0 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Flag size={12} className="text-[#2F3D56]" />
-                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">
-                    Flagged Moments
-                  </span>
+                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">Flagged Moments</span>
                 </div>
                 {flaggedMoments.length > 0 && (
                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#2F3D56] text-white">
@@ -482,34 +529,28 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
         </div>
       </div>
 
-      {/* ── Capture action bar (all lectures) ───────────────────── */}
+      {/* ── Capture bar ──────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-[#f8f9fb] border-t border-gray-200 shrink-0">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-0.5 shrink-0">
-          Capture
-        </span>
-
+        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-0.5 shrink-0">Capture</span>
         <button onClick={() => handleCapture("last30s")} disabled={isStopped}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
           <Volume2 size={12} /> Last 30s
         </button>
-
         <button onClick={() => handleCapture("last1m")} disabled={isStopped}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
           <Volume2 size={12} /> Last 1m
         </button>
-
         <button onClick={() => handleCapture("snapshot")} disabled={isStopped}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 hover:border-indigo-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
           <Camera size={12} /> Snapshot
         </button>
-
         <div className="flex-1" />
         <span className="text-[9px] text-gray-400 font-mono tabular-nums hidden sm:block">
           Slide {pageNumber}{numPages ? ` / ${numPages}` : ""}
         </span>
       </div>
 
-      {/* ── Slide navigation bar ─────────────────────────────────── */}
+      {/* ── Slide nav ────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-100 rounded-b-2xl shrink-0">
         <button onClick={goPrev} disabled={pageNumber <= 1}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
@@ -524,7 +565,7 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
         </button>
       </div>
 
-      {/* ── End Recording confirmation modal ─────────────────────── */}
+      {/* ── End Recording modal ──────────────────────────────── */}
       {showEndModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
@@ -533,28 +574,23 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
             </div>
             <h3 className="text-lg font-bold text-gray-900 text-center mb-2">End recording?</h3>
             <p className="text-sm text-gray-500 text-center leading-relaxed mb-4">
-              This will save the current lecture recording and store it under{" "}
+              This will save the recording and store it under{" "}
               <span className="font-semibold text-gray-700">Previous Recordings</span>.
             </p>
-
-            {/* Live preview of what will be saved */}
             <div className="rounded-xl bg-[#f8f9fb] border border-gray-200 px-4 py-3 mb-6 space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Duration</span>
-                <span className="font-mono font-semibold text-gray-800">{formatTime(seconds)}</span>
+                <span className="font-mono font-semibold text-gray-800">{formatTime(simSeconds)}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Coverage</span>
-                <span className="font-semibold text-gray-800">
-                  Slide {firstSlideRef.current} → {pageNumber}
-                </span>
+                <span className="font-semibold text-gray-800">Slide {firstSlideRef.current} → {pageNumber}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Flagged Moments</span>
                 <span className="font-semibold text-gray-800">{flaggedMoments.length}</span>
               </div>
             </div>
-
             <div className="flex gap-3">
               <button onClick={handleCancelEnd}
                 className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
@@ -569,7 +605,7 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
         </div>
       )}
 
-      {/* ── Toast ────────────────────────────────────────────────── */}
+      {/* ── Toast ────────────────────────────────────────────── */}
       {toast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-[#2F3D56] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-xl pointer-events-none">
           <span className="text-green-400 text-sm">✓</span>
@@ -577,5 +613,14 @@ export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
         </div>
       )}
     </>
+  );
+}
+
+// ── Public export: inner component wrapped in error boundary ──────────────────
+export default function RecordingScreen(props) {
+  return (
+    <RecordingErrorBoundary onClose={props.onClose} onBack={props.onBack}>
+      <RecordingScreenInner {...props} />
+    </RecordingErrorBoundary>
   );
 }
