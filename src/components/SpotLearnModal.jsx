@@ -169,7 +169,7 @@ export default function SpotLearnModal({ lecture, onClose }) {
                 >
                   <ArrowLeft size={14} className="text-gray-500" />
                 </button>
-                <img src="/spotix-logo.jpg" alt="Spotix" className="w-6 h-6 rounded-full object-cover" />
+                <img src="/spotix-icon-mark.png" alt="Spotix" className="w-7 h-7 object-contain" />
                 <span className="font-bold text-gray-800 text-sm tracking-tight">Previous Recordings</span>
               </div>
               <button
@@ -243,7 +243,7 @@ export default function SpotLearnModal({ lecture, onClose }) {
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
-                <img src="/spotix-logo.jpg" alt="Spotix" className="w-7 h-7 rounded-full object-cover" />
+                <img src="/spotix-logo.png" alt="Spotix" className="h-9 object-contain" />
                 <span className="font-bold text-gray-800 text-sm tracking-tight">SpotLearn</span>
               </div>
               <button
@@ -331,3 +331,4 @@ export default function SpotLearnModal({ lecture, onClose }) {
     </div>
   );
 }
+                     

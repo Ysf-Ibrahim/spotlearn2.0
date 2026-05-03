@@ -656,7 +656,7 @@ export default function RecordingAnalysis({ rec, onBack, onClose, onBackToOvervi
             className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
             <ArrowLeft size={14} className="text-gray-500" />
           </button>
-          <img src="/spotix-logo.jpg" alt="Spotix" className="w-6 h-6 rounded-full object-cover" />
+          <img src="/spotix-icon-mark.png" alt="Spotix" className="w-7 h-7 object-contain" />
           <span className="font-bold text-gray-800 text-sm tracking-tight">SpotLearn Analysis</span>
         </div>
         <div className="flex items-center gap-2">

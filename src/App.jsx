@@ -28,7 +28,7 @@ export default function App() {
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-1.5 text-emerald-600 text-xs font-semibold">
-            <img src="/spotix-icon.svg" alt="Spotix" className="w-4 h-4" />
+            <img src="/spotix-icon-mark.png" alt="Spotix" className="w-5 h-5 object-contain" />
             SpotLearn by Spotix
           </div>
         </div>
@@ -49,8 +49,10 @@ export default function App() {
       {/* Footer */}
       <footer className="bg-[#2d3748] text-gray-400 py-5 text-xs mt-8">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2">
-            <img src="/spotix-logo.jpg" alt="Spotix" className="w-6 h-6 rounded-full object-cover opacity-80" />
+          <div className="flex items-center gap-2.5">
+            <div className="bg-white/90 rounded-xl p-1 shrink-0">
+              <img src="/spotix-icon-mark.png" alt="Spotix" className="w-6 h-6 object-contain" />
+            </div>
             <span className="text-white font-semibold text-sm">Spotix</span>
           </div>
           <span>SpotLearn Prototype | UI Only | No Backend</span>
@@ -60,10 +62,4 @@ export default function App() {
       {/* SpotLearn Modal */}
       {selectedLecture && (
         <SpotLearnModal
-          lecture={selectedLecture}
-          onClose={() => setSelectedLecture(null)}
-        />
-      )}
-    </div>
-  );
-}
+          lecture={selectedLectur
