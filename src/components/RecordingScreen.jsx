@@ -34,51 +34,58 @@ function formatTs(totalSec) {
   const s = (totalSec % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
-// Parse "MM:SS" timestamp string → total seconds
+// "MM:SS" or "HH:MM:SS" → total seconds
 function tsToSec(ts = "00:00") {
   const parts = ts.split(":").map(Number);
-  return parts.length === 2 ? parts[0] * 60 + parts[1]
-       : parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2]
-       : 0;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return 0;
 }
 
-// ── Per-lecture speed multiplier ──────────────────────────────────────────────
-// speedMult: real 1 second → simMult simulated seconds
+// ── Per-lecture simulated speed (internal only, never shown in UI) ─────────────
+// speedMult: every 1 real second → speedMult simulated seconds
 const LECTURE_SPEED = {
-  "Lecture 01 Embedded System": 3,
-  // all others default to 1
+  "Lecture 01 Embedded System": 2,  // x2 internal speed
 };
 function getSpeed(label) { return LECTURE_SPEED[label] ?? 1; }
 
-// ── Transcript data per lecture ───────────────────────────────────────────────
+// ── Transcript config per lecture ─────────────────────────────────────────────
+// Fields per line:
+//   ts    – timestamp string shown in UI (e.g. "00:12")
+//   text  – spoken text shown in UI
+//   slide – (optional) page to auto-sync the PDF viewer to (internal, not rendered)
+//
+// startSlide – (optional) page to open when this lecture's recording begins
 const TRANSCRIPTS = {
   "Lecture 01 Embedded System": {
+    startSlide: 7,
     statusLabel: "Generating transcript live…",
     lines: [
-      { ts: "00:00", text: "Welcome to Lecture 01. Today we're going to look at what an embedded system actually is." },
-      { ts: "00:05", text: "An embedded system is a microprocessor-based system designed to perform a specific, dedicated function." },
-      { ts: "00:10", text: "Unlike a general-purpose computer, an embedded system typically runs a single application repeatedly." },
-      { ts: "00:15", text: "Examples are all around you — your microwave, washing machine, car ECU, and smart thermostat." },
-      { ts: "00:20", text: "Each of these contains a processor, memory, and I/O — tightly integrated on a single platform." },
-      { ts: "00:26", text: "The three core components of any embedded system are: processor, memory, and peripheral interfaces." },
-      { ts: "00:32", text: "The processor could be a microcontroller, microprocessor, DSP, or FPGA depending on the application." },
-      { ts: "00:38", text: "Memory comes in two main types: volatile RAM for runtime data, and non-volatile flash for program storage." },
-      { ts: "00:44", text: "Peripherals handle everything external — GPIO, UART, SPI, I2C, ADC, PWM, and more." },
-      { ts: "00:50", text: "There are two fundamental memory architectures: Von Neumann and Harvard." },
-      { ts: "00:56", text: "Von Neumann uses a single shared bus for both instructions and data — simpler but slower." },
-      { ts: "01:02", text: "Harvard architecture uses separate buses for program and data memory — faster and more predictable." },
-      { ts: "01:08", text: "The PIC microcontroller we use in this course follows the Harvard architecture." },
-      { ts: "01:14", text: "Embedded systems are designed under strict constraints: limited power, limited memory, and low cost." },
-      { ts: "01:20", text: "Real-time operation is another key constraint — the system must respond to events within a deadline." },
-      { ts: "01:26", text: "Hard real-time means missing a deadline causes system failure — think of an airbag controller." },
-      { ts: "01:32", text: "Soft real-time means missing a deadline degrades performance but doesn't cause failure — like a video player." },
-      { ts: "01:38", text: "The design cycle for embedded systems includes: specification, hardware design, software development, and testing." },
-      { ts: "01:44", text: "Cross-compilation is the process of writing code on one machine and compiling it for a different target." },
-      { ts: "01:50", text: "In this course, we write C or assembly on a PC but compile and run it on the PIC microcontroller." },
-      { ts: "01:56", text: "MPLAB X IDE is the development environment we'll use — it integrates the editor, compiler, and programmer." },
-      { ts: "02:02", text: "The XC8 compiler translates our C code into machine instructions that the PIC can execute directly." },
-      { ts: "02:08", text: "A PICkit programmer loads the compiled binary into the microcontroller's flash memory." },
-      { ts: "02:14", text: "Understanding these foundations is essential before we dive into the PIC register set next lecture." },
+      { ts: "00:00", slide: 7, text: "Now let us focus on this comparison between a microcontroller and a microprocessor. This slide is very important because it explains why embedded systems usually use microcontrollers instead of only microprocessors." },
+      { ts: "00:12", slide: 7, text: "On the left side, we have the microprocessor. A microprocessor is general-purpose. That means it is designed mainly for processing different kinds of tasks, not only for controlling one specific device." },
+      { ts: "00:27", slide: 7, text: "The slide also says that a microprocessor has many instruction types and modes. This makes it powerful and flexible for general computing, but the complete system usually needs extra external hardware." },
+      { ts: "00:44", slide: 7, text: "A key point here is that the hardware of a microprocessor mainly includes the CPU only. So the CPU is stand-alone, and components such as RAM, ROM, input-output ports, and timers are separate." },
+      { ts: "01:02", slide: 7, text: "This means if we build a microprocessor-based system, we usually need to connect memory and input-output components externally. This gives flexibility, but it increases size, wiring, cost, and design complexity." },
+      { ts: "01:20", slide: 7, text: "Now look at the right side of the slide. The microcontroller is usually single-purpose. It is mainly used for control, which makes it very suitable for embedded systems." },
+      { ts: "01:35", slide: 7, text: "The most important idea is integration. In a microcontroller, the CPU, RAM, ROM, input-output ports, and timer are all placed on a single chip." },
+      { ts: "01:50", slide: 7, text: "Because these components are already inside the chip, a microcontroller-based system is usually smaller, cheaper, simpler, and easier to use for direct hardware control." },
+      { ts: "02:06", slide: 7, text: "Another important point is that microcontrollers often do not need a full operating system. In many embedded systems, the microcontroller executes one dedicated program again and again." },
+      { ts: "02:22", slide: 7, text: "So the simple comparison is this: a microprocessor is mainly a CPU for general processing, while a microcontroller is a small complete computer on one chip designed mainly for control." },
+      { ts: "02:39", slide: 7, text: "For exam or presentation purposes, remember these pairs: general-purpose versus single-purpose, processing versus control, external components versus integrated components, and larger system versus compact system." },
+      { ts: "02:58", slide: 7, text: "Now the next slide shows the same idea visually using a time and temperature system example. This will make the difference much easier to understand." },
+      { ts: "03:12", slide: 8, text: "Now we are looking at the design example slide. This slide compares an MPU-based time and temperature system with an MCU-based time and temperature system." },
+      { ts: "03:26", slide: 8, text: "On the left side, MPU means microprocessor unit. Notice that the microprocessor unit is only one block, and many other system components are placed separately around it." },
+      { ts: "03:42", slide: 8, text: "For example, the temperature sensor is separate. The analog-to-digital converter is separate. The timer is separate. The flash memory and read-write memory are also separate." },
+      { ts: "03:58", slide: 8, text: "The output devices, such as the fan, heater, and LCD, are also separate blocks. These parts communicate through the system bus." },
+      { ts: "04:13", slide: 8, text: "This left-side diagram shows why a microprocessor system can become more complex. The designer must connect several separate modules to build a full working system." },
+      { ts: "04:30", slide: 8, text: "Now compare this with the right side. MCU means microcontroller unit. Here, the microcontroller already contains several important blocks inside it." },
+      { ts: "04:45", slide: 8, text: "Inside the microcontroller block, we can see the microprocessor unit, flash memory, read-write memory, timer, and analog-to-digital converter. These are integrated inside the chip." },
+      { ts: "05:02", slide: 8, text: "The external devices are mainly the peripherals that interact with the real world, such as the temperature sensor, heater, fan, and LCD." },
+      { ts: "05:17", slide: 8, text: "This makes the microcontroller-based system more compact. It also reduces external wiring because many functions are already built into the microcontroller." },
+      { ts: "05:32", slide: 8, text: "The visual difference is simple. In the microprocessor system, many important blocks are outside the CPU. In the microcontroller system, many of those blocks are already inside the chip." },
+      { ts: "05:50", slide: 8, text: "This is why microcontrollers are usually preferred for embedded control applications. They are easier to connect to sensors and actuators, and they reduce the hardware needed to build the system." },
+      { ts: "06:07", slide: 8, text: "So if you want to explain this slide in one sentence: the MPU-based design needs many external blocks, while the MCU-based design integrates many of those blocks into one chip." },
+      { ts: "06:24", slide: 8, text: "The final takeaway is that the microprocessor gives more flexibility for general processing, but the microcontroller is better for compact, low-cost, control-based embedded systems." },
     ],
   },
 
@@ -198,36 +205,38 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   const renderTaskRef    = useRef(null);
   const transcriptEndRef = useRef(null);
   const toastTimerRef    = useRef(null);
-  const mountedRef       = useRef(true);    // prevent setState after unmount
-  const firstSlideRef    = useRef(1);
-  const prevLineCountRef = useRef(0);       // for auto-scroll diff
+  const mountedRef       = useRef(true);
+  const prevLineCountRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  const speedMult    = getSpeed(lecture?.label ?? "");
+  const speedMult     = getSpeed(lecture?.label ?? "");
   const transcriptCfg = TRANSCRIPTS[lecture?.label ?? ""] ?? null;
   const hasTranscript = !!transcriptCfg;
+  const startSlide    = transcriptCfg?.startSlide ?? 1;
 
   const [pdfDoc,         setPdfDoc]         = useState(null);
   const [numPages,       setNumPages]        = useState(null);
-  const [pageNumber,     setPageNumber]      = useState(1);
-  const [pdfStatus,      setPdfStatus]       = useState("loading"); // loading | ready | error
-  const [simSeconds,     setSimSeconds]      = useState(0);          // single simulated clock
+  const [pageNumber,     setPageNumber]      = useState(startSlide);
+  const [pdfStatus,      setPdfStatus]       = useState("loading");
+  const [simSeconds,     setSimSeconds]      = useState(0);
   const [flaggedMoments, setFlaggedMoments]  = useState([]);
   const [toast,          setToast]           = useState(null);
   const [isStopped,      setIsStopped]       = useState(false);
   const [showEndModal,   setShowEndModal]    = useState(false);
 
-  // Ref so the single interval can read isStopped without a stale closure
+  // firstSlide for the saved recording coverage (start of session)
+  const firstSlideRef = useRef(startSlide);
+
   const isStoppedRef = useRef(false);
   useEffect(() => { isStoppedRef.current = isStopped; }, [isStopped]);
 
-  // ── Single simulated clock ──────────────────────────────────
-  // One interval, runs every real second, advances simSeconds by speedMult.
-  // This drives: timer display, transcript visibility, capture timestamps, saved duration.
+  // ── Single simulated clock ─────────────────────────────────────
+  // One interval. Drives timer display, transcript visibility, and capture timestamps.
+  // No second interval for transcript — visibility is pure derived state.
   useEffect(() => {
     const id = setInterval(() => {
       if (!isStoppedRef.current && mountedRef.current) {
@@ -235,21 +244,36 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
       }
     }, 1000);
     return () => clearInterval(id);
-  // speedMult never changes for a given lecture, safe to exclude from deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // speedMult is constant for a given lecture — safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Derive visible transcript lines from simSeconds ─────────
-  // No separate transcript interval — visibility is a pure function of simulated time.
+  // ── Derive visible transcript lines from simulated time ─────────
   const visibleLines = useMemo(() => {
-    if (!hasTranscript || !transcriptCfg?.lines) return [];
+    if (!hasTranscript || !transcriptCfg?.lines?.length) return [];
     return transcriptCfg.lines.filter((line) => tsToSec(line.ts) <= simSeconds);
   }, [simSeconds, hasTranscript, transcriptCfg]);
 
   const transcriptDone = hasTranscript &&
     visibleLines.length >= (transcriptCfg?.lines?.length ?? 0);
 
-  // ── Auto-scroll: trigger only when a NEW line appears ───────
+  // ── Auto-sync PDF viewer to transcript's current slide ─────────
+  // Uses the `slide` field on transcript lines (internal, never rendered).
+  // Fires only when the slide in the transcript changes (e.g. lines cross from slide 7 → 8).
+  const currentTranscriptSlide = useMemo(() => {
+    if (!hasTranscript || visibleLines.length === 0) return startSlide;
+    const lastLine = visibleLines[visibleLines.length - 1];
+    return lastLine?.slide ?? startSlide;
+  }, [visibleLines, hasTranscript, startSlide]);
+
+  useEffect(() => {
+    // Only auto-sync for lectures that define a startSlide (i.e. Lecture 01)
+    if (hasTranscript && transcriptCfg?.startSlide != null && !isStopped) {
+      setPageNumber(currentTranscriptSlide);
+    }
+  }, [currentTranscriptSlide, hasTranscript, transcriptCfg?.startSlide, isStopped]);
+
+  // ── Auto-scroll: only when a new line appears ───────────────────
   useEffect(() => {
     if (visibleLines.length > prevLineCountRef.current) {
       prevLineCountRef.current = visibleLines.length;
@@ -257,7 +281,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     }
   }, [visibleLines.length]);
 
-  // ── Toast helper ─────────────────────────────────────────────
+  // ── Toast helper ────────────────────────────────────────────────
   function showToast(msg) {
     if (!mountedRef.current) return;
     setToast(msg);
@@ -268,25 +292,20 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   }
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
-  // ── Capture handler ──────────────────────────────────────────
+  // ── Capture handler ─────────────────────────────────────────────
   function handleCapture(type) {
     const toTs   = formatTs(simSeconds);
     const fromTs = type === "last30s" ? formatTs(Math.max(0, simSeconds - 30))
                  : type === "last1m"  ? formatTs(Math.max(0, simSeconds - 60))
                  : null;
-    const moment = {
-      id: Date.now(),
-      type,
-      toTs,
-      fromTs,
-      slideNumber:  pageNumber,
-      totalSlides:  numPages,
-    };
-    setFlaggedMoments((prev) => [moment, ...prev]);
+    setFlaggedMoments((prev) => [
+      { id: Date.now(), type, toTs, fromTs, slideNumber: pageNumber, totalSlides: numPages },
+      ...prev,
+    ]);
     showToast(type === "snapshot" ? "Snapshot saved to flagged moments" : "Saved to flagged moments");
   }
 
-  // ── End / Save flow ──────────────────────────────────────────
+  // ── End / Save flow ─────────────────────────────────────────────
   function handleEndClick()  { setShowEndModal(true); }
   function handleCancelEnd() { setShowEndModal(false); }
   function handleSaveRecording() {
@@ -298,20 +317,20 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
       savedAt:      new Date(),
       firstSlide:   firstSlideRef.current,
       lastSlide:    pageNumber,
-      duration:     simSeconds,       // simulated duration
+      duration:     simSeconds,
       flaggedCount: flaggedMoments.length,
     });
   }
 
-  // ── Load PDF ─────────────────────────────────────────────────
+  // ── Load PDF ────────────────────────────────────────────────────
   useEffect(() => {
     if (!lecture?.pdfPath) { setPdfStatus("error"); return; }
     let cancelled = false;
     setPdfStatus("loading");
     setPdfDoc(null);
     setNumPages(null);
-    setPageNumber(1);
-    firstSlideRef.current = 1;
+    setPageNumber(startSlide);
+    firstSlideRef.current = startSlide;
 
     loadPdfJs()
       .then((lib) => lib.getDocument(lecture.pdfPath).promise)
@@ -324,9 +343,10 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
       .catch(() => { if (!cancelled && mountedRef.current) setPdfStatus("error"); });
 
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lecture?.pdfPath]);
 
-  // ── Render PDF page ───────────────────────────────────────────
+  // ── Render PDF page ─────────────────────────────────────────────
   const renderPage = useCallback(async (doc, pageNum, canvas, container) => {
     if (!doc || !canvas || !container) return;
     if (renderTaskRef.current) {
@@ -343,7 +363,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
       const task    = page.render({ canvasContext: canvas.getContext("2d"), viewport: vp });
       renderTaskRef.current = task;
       await task.promise;
-    } catch { /* render cancelled or failed — safe to ignore */ }
+    } catch { /* render cancelled — ignore */ }
   }, []);
 
   useEffect(() => {
@@ -352,14 +372,15 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     }
   }, [pdfStatus, pdfDoc, pageNumber, renderPage]);
 
-  // ── Slide navigation ─────────────────────────────────────────
   const goPrev = () => setPageNumber((p) => Math.max(1, p - 1));
   const goNext = () => setPageNumber((p) => Math.min(numPages ?? p, p + 1));
 
   return (
     <>
-      {/* ── Top bar ──────────────────────────────────────────── */}
+      {/* ── Top bar ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-3 bg-[#2F3D56] rounded-t-2xl shrink-0">
+
+        {/* Left: back + lecture title */}
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={onBack} title="Back to overview"
             className="text-white/60 hover:text-white transition-colors shrink-0">
@@ -370,6 +391,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
           </span>
         </div>
 
+        {/* Center: recording status + timer */}
         <div className="flex items-center gap-2 shrink-0">
           {!isStopped ? (
             <>
@@ -385,13 +407,9 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
           <span className="font-mono text-white/70 text-xs bg-white/10 px-2 py-0.5 rounded-md ml-1 tabular-nums">
             {formatTime(simSeconds)}
           </span>
-          {speedMult > 1 && (
-            <span className="text-[9px] font-bold bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-400/30">
-              ×{speedMult}
-            </span>
-          )}
         </div>
 
+        {/* Right: End Recording + Close */}
         <div className="flex items-center gap-2 shrink-0">
           {!isStopped && (
             <button onClick={handleEndClick}
@@ -406,7 +424,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         </div>
       </div>
 
-      {/* ── Main content row ──────────────────────────────────── */}
+      {/* ── Main content row ──────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
 
         {/* PDF viewer */}
@@ -430,35 +448,42 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
           )}
         </div>
 
-        {/* Right panel: Transcript + Flagged Moments */}
+        {/* Right panel: Live Transcript + Flagged Moments */}
         <div className="w-[300px] bg-white border-l border-gray-200 flex flex-col min-h-0 shrink-0">
 
-          {/* Transcript */}
+          {/* ── Transcript section ── */}
           <div className="flex-[3] flex flex-col min-h-0 border-b border-gray-200">
             <div className="px-4 py-2.5 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Mic size={12} className="text-[#2F3D56]" />
-                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">Live Transcript</span>
+                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">
+                    Live Transcript
+                  </span>
                 </div>
-                {/* Status badge */}
-                {!hasTranscript ? null
-                  : isStopped ? (
-                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Stopped</span>
+                {/* Status badge — only text, no speed info */}
+                {hasTranscript && (
+                  isStopped ? (
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                      Stopped
+                    </span>
                   ) : transcriptDone ? (
-                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Completed</span>
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                      Completed
+                    </span>
                   ) : (
                     <span className="flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
                       {transcriptCfg?.statusLabel ?? "Listening…"}
                     </span>
                   )
-                }
+                )}
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 py-2 min-h-0">
               {!hasTranscript ? (
+                /* No transcript available for this lecture */
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3">
                   <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
                     <Mic size={16} className="text-gray-400" />
@@ -475,6 +500,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
                       <div key={i} className={`flex gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
                         isNewest ? "bg-blue-50 border border-blue-100" : "hover:bg-gray-50"
                       }`}>
+                        {/* Only render timestamp + text — slide/title are internal only */}
                         <span className="font-mono text-[9px] text-gray-400 shrink-0 mt-0.5 tabular-nums">
                           [{line.ts}]
                         </span>
@@ -496,13 +522,15 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
             </div>
           </div>
 
-          {/* Flagged moments */}
+          {/* ── Flagged Moments section ── */}
           <div className="flex-[2] flex flex-col min-h-0">
             <div className="px-4 py-2.5 shrink-0 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Flag size={12} className="text-[#2F3D56]" />
-                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">Flagged Moments</span>
+                  <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">
+                    Flagged Moments
+                  </span>
                 </div>
                 {flaggedMoments.length > 0 && (
                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#2F3D56] text-white">
@@ -529,9 +557,11 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         </div>
       </div>
 
-      {/* ── Capture bar ──────────────────────────────────────── */}
+      {/* ── Capture bar ──────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-[#f8f9fb] border-t border-gray-200 shrink-0">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-0.5 shrink-0">Capture</span>
+        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-0.5 shrink-0">
+          Capture
+        </span>
         <button onClick={() => handleCapture("last30s")} disabled={isStopped}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
           <Volume2 size={12} /> Last 30s
@@ -550,7 +580,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         </span>
       </div>
 
-      {/* ── Slide nav ────────────────────────────────────────── */}
+      {/* ── Slide nav ────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-100 rounded-b-2xl shrink-0">
         <button onClick={goPrev} disabled={pageNumber <= 1}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
@@ -565,7 +595,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         </button>
       </div>
 
-      {/* ── End Recording modal ──────────────────────────────── */}
+      {/* ── End Recording confirmation modal ─────────────────────── */}
       {showEndModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
@@ -584,7 +614,9 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Coverage</span>
-                <span className="font-semibold text-gray-800">Slide {firstSlideRef.current} → {pageNumber}</span>
+                <span className="font-semibold text-gray-800">
+                  Slide {firstSlideRef.current} → {pageNumber}
+                </span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Flagged Moments</span>
@@ -605,7 +637,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         </div>
       )}
 
-      {/* ── Toast ────────────────────────────────────────────── */}
+      {/* ── Toast ────────────────────────────────────────────────── */}
       {toast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-[#2F3D56] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-xl pointer-events-none">
           <span className="text-green-400 text-sm">✓</span>
