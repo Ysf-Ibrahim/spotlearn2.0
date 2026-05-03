@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { X, Clock, Lightbulb, Target, BookOpen, ArrowLeft, BookMarked, Flag, Layers } from "lucide-react";
+import { X, Clock, Lightbulb, Target, BookOpen, ArrowLeft, BookMarked, Flag, Layers, Sparkles } from "lucide-react";
 import { courseInfo } from "../data/courseData";
 import RecordingScreen from "./RecordingScreen";
+import RecordingAnalysis from "./RecordingAnalysis";
 
 const CARD_ICONS = [Lightbulb, Target, BookOpen];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDuration(s) {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60).toString().padStart(2, "0");
   const sec = (s % 60).toString().padStart(2, "0");
   return h > 0 ? `${h}:${m}:${sec}` : `${m}:${sec}`;
 }
-
 function formatSavedDate(d) {
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
@@ -20,11 +20,13 @@ function formatSavedDate(d) {
 }
 
 // ── Saved recording card ──────────────────────────────────────────────────────
-function RecordingCard({ rec }) {
+function RecordingCard({ rec, onOpenAnalysis }) {
+  const isLec01 = rec.lectureLabel?.includes("Lecture 01");
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white hover:border-blue-200 hover:shadow-sm transition-all overflow-hidden">
-      {/* Top accent bar */}
-      <div className="h-1 bg-gradient-to-r from-[#2F3D56] to-blue-400" />
+      {/* Accent bar */}
+      <div className={`h-1 bg-gradient-to-r ${isLec01 ? "from-[#2F3D56] via-blue-400 to-purple-400" : "from-[#2F3D56] to-blue-400"}`} />
 
       <div className="p-4">
         {/* Title row */}
@@ -35,18 +37,23 @@ function RecordingCard({ rec }) {
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-gray-800 truncate">{rec.lectureLabel}</h3>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Saved {formatSavedDate(rec.savedAt)}
-              </p>
+              <p className="text-[10px] text-gray-400 mt-0.5">Saved {formatSavedDate(rec.savedAt)}</p>
             </div>
           </div>
-          <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
-            ✓ Saved
-          </span>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
+              ✓ Saved
+            </span>
+            {isLec01 && (
+              <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500 border border-blue-100">
+                ✦ Analysis Ready
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Stats grid */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="rounded-lg bg-[#f8f9fb] border border-gray-100 px-3 py-2">
             <div className="flex items-center gap-1 mb-1">
               <Layers size={9} className="text-gray-400" />
@@ -56,7 +63,6 @@ function RecordingCard({ rec }) {
               Slide {rec.firstSlide} → {rec.lastSlide}
             </p>
           </div>
-
           <div className="rounded-lg bg-[#f8f9fb] border border-gray-100 px-3 py-2">
             <div className="flex items-center gap-1 mb-1">
               <Clock size={9} className="text-gray-400" />
@@ -66,7 +72,6 @@ function RecordingCard({ rec }) {
               {formatDuration(rec.duration)}
             </p>
           </div>
-
           <div className="rounded-lg bg-[#f8f9fb] border border-gray-100 px-3 py-2">
             <div className="flex items-center gap-1 mb-1">
               <Flag size={9} className="text-gray-400" />
@@ -77,15 +82,27 @@ function RecordingCard({ rec }) {
             </p>
           </div>
         </div>
+
+        {/* Open Analysis button — Lecture 01 only */}
+        {isLec01 && (
+          <button
+            onClick={onOpenAnalysis}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#2F3D56] hover:bg-[#263347] text-white text-xs font-semibold transition-all shadow-sm hover:shadow-md group"
+          >
+            <Sparkles size={12} className="group-hover:scale-110 transition-transform" />
+            Open Analysis
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Modal ────────────────────────────────────────────────────────────────────
+// ── Modal ─────────────────────────────────────────────────────────────────────
 export default function SpotLearnModal({ lecture, onClose }) {
-  const [action,     setAction]     = useState(null); // null | "record" | "previous"
-  const [recordings, setRecordings] = useState([]);
+  const [action,      setAction]      = useState(null); // null | "record" | "previous" | "analysis"
+  const [recordings,  setRecordings]  = useState([]);
+  const [selectedRec, setSelectedRec] = useState(null);
 
   function handleBackdropClick(e) {
     if (e.target === e.currentTarget) onClose();
@@ -93,27 +110,35 @@ export default function SpotLearnModal({ lecture, onClose }) {
   function handleKeyDown(e) {
     if (e.key === "Escape") onClose();
   }
-
   function handleSaveRecording(data) {
     setRecordings((prev) => [data, ...prev]);
     setAction("previous");
   }
+  function openAnalysis(rec) {
+    setSelectedRec(rec);
+    setAction("analysis");
+  }
 
   const isRecording = action === "record";
+  const isAnalysis  = action === "analysis";
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={!isRecording ? handleBackdropClick : undefined}
+      onClick={!isRecording && !isAnalysis ? handleBackdropClick : undefined}
       onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
     >
-      <div className={`bg-white rounded-2xl shadow-2xl w-full flex flex-col transition-all duration-300
-        ${isRecording ? "max-w-4xl h-[90vh]" : "max-w-2xl max-h-[90vh] overflow-y-auto"}`}
+      <div
+        className={`bg-white rounded-2xl shadow-2xl w-full flex flex-col transition-all duration-300 ${
+          isRecording ? "max-w-4xl h-[90vh]"
+          : isAnalysis ? "max-w-3xl h-[90vh]"
+          : "max-w-2xl max-h-[90vh] overflow-y-auto"
+        }`}
       >
 
-        {/* ── Recording screen ── */}
+        {/* ── Recording screen ──────────────────────────────────────── */}
         {isRecording ? (
           <RecordingScreen
             lecture={lecture}
@@ -121,9 +146,18 @@ export default function SpotLearnModal({ lecture, onClose }) {
             onBack={() => setAction(null)}
             onSave={handleSaveRecording}
           />
-        ) : action === "previous" ? (
 
-          /* ── Previous Recordings view ── */
+        ) : isAnalysis && selectedRec ? (
+          /* ── Analysis screen ──────────────────────────────────────── */
+          <RecordingAnalysis
+            rec={selectedRec}
+            onBack={() => setAction("previous")}
+            onClose={onClose}
+            onBackToOverview={() => setAction(null)}
+          />
+
+        ) : action === "previous" ? (
+          /* ── Previous Recordings view ─────────────────────────────── */
           <>
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 shrink-0">
@@ -191,7 +225,11 @@ export default function SpotLearnModal({ lecture, onClose }) {
                   </div>
                   <div className="space-y-3">
                     {recordings.map((rec) => (
-                      <RecordingCard key={rec.id} rec={rec} />
+                      <RecordingCard
+                        key={rec.id}
+                        rec={rec}
+                        onOpenAnalysis={() => openAnalysis(rec)}
+                      />
                     ))}
                   </div>
                 </>
@@ -200,8 +238,7 @@ export default function SpotLearnModal({ lecture, onClose }) {
           </>
 
         ) : (
-
-          /* ── Overview screen ── */
+          /* ── Overview screen ──────────────────────────────────────── */
           <>
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 shrink-0">

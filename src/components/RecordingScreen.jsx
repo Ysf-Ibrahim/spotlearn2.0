@@ -336,7 +336,8 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
       firstSlide:   firstSlideRef.current,
       lastSlide:    pageNumber,
       duration:     simSeconds,
-      flaggedCount: flaggedMoments.length,
+      flaggedCount:   flaggedMoments.length,
+      flaggedMoments: flaggedMoments,
     });
   }
 
