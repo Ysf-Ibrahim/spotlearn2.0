@@ -42,7 +42,7 @@ function tsToSec(ts = "00:00") {
 }
 
 // ── Per-lecture simulated speed (internal only, never shown in UI) ─────────────
-const LECTURE_SPEED = { "Lecture 01 Embedded System": 2 };
+const LECTURE_SPEED = { "Lecture 01 Embedded System": 3 };
 function getSpeed(label) { return LECTURE_SPEED[label] ?? 1; }
 
 // ── Transcript config per lecture ─────────────────────────────────────────────
