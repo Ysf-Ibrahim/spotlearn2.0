@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ChevronLeft, ChevronRight, X, ArrowLeft, Loader2,
-  Mic, Volume2, Camera, Flag,
+  Mic, Volume2, Camera, Flag, StopCircle,
 } from "lucide-react";
 
 // ── pdf.js via CDN ───────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ const TRANSCRIPT_LINES = [
 ];
 const TRANSCRIPT_INTERVAL_MS = 5000;
 
-// ── Flagged moment card meta ──────────────────────────────────────────────────
+// ── Flagged moment card meta ─────────────────────────────────────────────────
 const MOMENT_META = {
   last30s:  { title: "Audio Segment Saved",  label: "Last 30 seconds", icon: Volume2, color: "blue"   },
   last1m:   { title: "Audio Segment Saved",  label: "Last 1 minute",   icon: Volume2, color: "blue"   },
@@ -76,18 +76,14 @@ function FlaggedCard({ moment }) {
   const meta = MOMENT_META[moment.type];
   const Icon = meta.icon;
   const isAudio = moment.type !== "snapshot";
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/20 transition-all p-3 mb-2 last:mb-0">
       <div className="flex items-start gap-2.5">
-        {/* icon */}
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
           isAudio ? "bg-blue-50" : "bg-indigo-50"
         }`}>
           <Icon size={13} className={isAudio ? "text-blue-500" : "text-indigo-500"} />
         </div>
-
-        {/* content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1 mb-0.5">
             <p className="text-xs font-semibold text-gray-800 truncate">{meta.title}</p>
@@ -97,11 +93,9 @@ function FlaggedCard({ moment }) {
               {meta.label}
             </span>
           </div>
-
           <p className="text-[10px] text-gray-500 mb-1">
             Slide {moment.slideNumber}{moment.totalSlides ? ` / ${moment.totalSlides}` : ""}
           </p>
-
           {isAudio ? (
             <div className="flex items-center gap-1 text-[10px] font-mono text-blue-600 bg-blue-50 rounded-md px-2 py-0.5 w-fit">
               <span>{moment.fromTs}</span>
@@ -110,16 +104,12 @@ function FlaggedCard({ moment }) {
             </div>
           ) : (
             <div className="flex items-center gap-1.5 mt-0.5">
-              {/* slide thumbnail placeholder */}
               <div className="w-10 h-7 rounded bg-gray-100 border border-gray-200 flex items-center justify-center text-[8px] text-gray-400 font-bold shrink-0">
                 S{moment.slideNumber}
               </div>
-              <span className="text-[10px] text-gray-400 leading-snug">
-                Snapshot saved from current slide
-              </span>
+              <span className="text-[10px] text-gray-400 leading-snug">Snapshot saved from current slide</span>
             </div>
           )}
-
           <p className="text-[9px] text-gray-400 mt-1.5">@ {moment.toTs} · Student marked for review</p>
         </div>
       </div>
@@ -128,12 +118,14 @@ function FlaggedCard({ moment }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function RecordingScreen({ lecture, onClose, onBack }) {
+export default function RecordingScreen({ lecture, onClose, onBack, onSave }) {
   const canvasRef        = useRef(null);
   const containerRef     = useRef(null);
   const renderTaskRef    = useRef(null);
   const transcriptEndRef = useRef(null);
   const toastTimerRef    = useRef(null);
+  // Ref so timer/transcript intervals can read isStopped without stale closures
+  const isStoppedRef     = useRef(false);
 
   const [pdfDoc,        setPdfDoc]        = useState(null);
   const [numPages,      setNumPages]      = useState(null);
@@ -143,8 +135,16 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
   const [visibleLines,  setVisibleLines]  = useState([]);
   const [flaggedMoments,setFlaggedMoments]= useState([]);
   const [toast,         setToast]         = useState(null);
+  const [isStopped,     setIsStopped]     = useState(false);
+  const [showEndModal,  setShowEndModal]  = useState(false);
+
+  // Track first slide (always starts at 1 for a fresh recording)
+  const firstSlideRef = useRef(1);
 
   const isLecture05 = lecture.label.includes("Lecture 05");
+
+  // Keep ref in sync with state so intervals can read current value
+  useEffect(() => { isStoppedRef.current = isStopped; }, [isStopped]);
 
   // ── Toast helper ──────────────────────────────────────────────
   function showToast(msg) {
@@ -162,7 +162,6 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
       : type === "last1m"
       ? formatTs(Math.max(0, seconds - 60))
       : null;
-
     setFlaggedMoments((prev) => [
       { id: Date.now(), type, toTs, fromTs, slideNumber: pageNumber, totalSlides: numPages },
       ...prev,
@@ -170,19 +169,40 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
     showToast("Saved to flagged moments");
   }
 
-  // ── Live timer ────────────────────────────────────────────────
+  // ── End recording flow ────────────────────────────────────────
+  function handleEndClick() { setShowEndModal(true); }
+  function handleCancelEnd() { setShowEndModal(false); }
+
+  function handleSaveRecording() {
+    setShowEndModal(false);
+    setIsStopped(true);
+    onSave({
+      id: Date.now(),
+      lectureLabel: lecture.label,
+      savedAt: new Date(),
+      firstSlide: firstSlideRef.current,
+      lastSlide: pageNumber,
+      duration: seconds,
+      flaggedCount: flaggedMoments.length,
+    });
+  }
+
+  // ── Live timer (stops when isStopped) ─────────────────────────
   useEffect(() => {
-    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    const id = setInterval(() => {
+      if (!isStoppedRef.current) setSeconds((s) => s + 1);
+    }, 1000);
     return () => clearInterval(id);
   }, []);
 
-  // ── Transcript simulation ─────────────────────────────────────
+  // ── Transcript simulation (Lecture 05 only) ───────────────────
   useEffect(() => {
     if (!isLecture05) return;
     let index = 0;
     setVisibleLines([TRANSCRIPT_LINES[0]]);
     index = 1;
     const id = setInterval(() => {
+      if (isStoppedRef.current) { clearInterval(id); return; }
       if (index >= TRANSCRIPT_LINES.length) { clearInterval(id); return; }
       setVisibleLines((prev) => [...prev, TRANSCRIPT_LINES[index]]);
       index += 1;
@@ -204,6 +224,7 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
     setPdfDoc(null);
     setNumPages(null);
     setPageNumber(1);
+    firstSlideRef.current = 1;
 
     loadPdfJs()
       .then((lib) => lib.getDocument(lecture.pdfPath).promise)
@@ -233,7 +254,7 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
       const task    = page.render({ canvasContext: canvas.getContext("2d"), viewport: vp });
       renderTaskRef.current = task;
       await task.promise;
-    } catch { /* cancelled renders throw — ignore */ }
+    } catch { /* cancelled renders — ignore */ }
   }, []);
 
   useEffect(() => {
@@ -262,20 +283,40 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-          </span>
-          <span className="text-white/90 text-xs font-medium tracking-wide">Recording</span>
+          {!isStopped && (
+            <>
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+              </span>
+              <span className="text-white/90 text-xs font-medium tracking-wide">Recording</span>
+            </>
+          )}
+          {isStopped && (
+            <span className="text-white/50 text-xs font-medium tracking-wide">Stopped</span>
+          )}
           <span className="font-mono text-white/70 text-xs bg-white/10 px-2 py-0.5 rounded-md ml-1 tabular-nums">
             {formatTime(seconds)}
           </span>
         </div>
 
-        <button onClick={onClose} title="End session"
-          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white shrink-0">
-          <X size={14} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* End Recording button */}
+          {!isStopped && (
+            <button
+              onClick={handleEndClick}
+              title="End recording"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/30 hover:border-rose-400/60 text-rose-300 hover:text-rose-200 text-xs font-semibold transition-all"
+            >
+              <StopCircle size={13} />
+              End
+            </button>
+          )}
+          <button onClick={onClose} title="Close"
+            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white">
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {/* ── Main content row ─────────────────────────────────────── */}
@@ -304,23 +345,22 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
           )}
         </div>
 
-        {/* ── Right panel: Transcript + Flagged Moments (Lecture 05) ── */}
+        {/* ── Right panel: Transcript + Flagged Moments ── */}
         {isLecture05 && (
           <div className="w-[300px] bg-white border-l border-gray-200 flex flex-col min-h-0 shrink-0">
 
             {/* Transcript section */}
             <div className="flex-[3] flex flex-col min-h-0 border-b border-gray-200">
-              {/* transcript header */}
-              <div className="px-4 py-2.5 shrink-0 bg-white">
+              <div className="px-4 py-2.5 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Mic size={12} className="text-[#2F3D56]" />
                     <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">Live Transcript</span>
                   </div>
-                  {transcriptDone ? (
-                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                      Completed
-                    </span>
+                  {isStopped ? (
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Stopped</span>
+                  ) : transcriptDone ? (
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Completed</span>
                   ) : (
                     <span className="flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
@@ -329,10 +369,9 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
                   )}
                 </div>
               </div>
-              {/* transcript lines */}
               <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5 min-h-0">
                 {visibleLines.map((line, i) => {
-                  const isNewest = !transcriptDone && i === visibleLines.length - 1;
+                  const isNewest = !transcriptDone && !isStopped && i === visibleLines.length - 1;
                   return (
                     <div key={i} className={`flex gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
                       isNewest ? "bg-blue-50 border border-blue-100" : "hover:bg-gray-50"
@@ -344,10 +383,10 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
                     </div>
                   );
                 })}
-                {transcriptDone && (
+                {(transcriptDone || isStopped) && (
                   <div className="flex items-center gap-2 px-2 py-2 mt-1 rounded-lg bg-gray-50 text-[10px] text-gray-400 border border-dashed border-gray-200">
                     <span>✓</span>
-                    <span>Transcript simulation completed.</span>
+                    <span>{isStopped ? "Transcript stopped." : "Transcript simulation completed."}</span>
                   </div>
                 )}
                 <div ref={transcriptEndRef} />
@@ -356,14 +395,11 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
 
             {/* Flagged moments section */}
             <div className="flex-[2] flex flex-col min-h-0">
-              {/* flagged header */}
-              <div className="px-4 py-2.5 shrink-0 bg-white border-b border-gray-100">
+              <div className="px-4 py-2.5 shrink-0 border-b border-gray-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Flag size={12} className="text-[#2F3D56]" />
-                    <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">
-                      Flagged Moments
-                    </span>
+                    <span className="text-[10px] font-bold text-gray-700 tracking-widest uppercase">Flagged Moments</span>
                   </div>
                   {flaggedMoments.length > 0 && (
                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#2F3D56] text-white">
@@ -372,7 +408,6 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
                   )}
                 </div>
               </div>
-              {/* flagged cards */}
               <div className="flex-1 overflow-y-auto px-3 py-2.5 min-h-0">
                 {flaggedMoments.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-2">
@@ -395,36 +430,20 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
       {/* ── Capture action bar (Lecture 05 only) ────────────────── */}
       {isLecture05 && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-[#f8f9fb] border-t border-gray-200 shrink-0">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-0.5 shrink-0">
-            Capture
-          </span>
-
-          <button
-            onClick={() => handleCapture("last30s")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95"
-          >
-            <Volume2 size={12} />
-            Last 30s
+          <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-0.5 shrink-0">Capture</span>
+          <button onClick={() => handleCapture("last30s")} disabled={isStopped}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Volume2 size={12} /> Last 30s
           </button>
-
-          <button
-            onClick={() => handleCapture("last1m")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95"
-          >
-            <Volume2 size={12} />
-            Last 1m
+          <button onClick={() => handleCapture("last1m")} disabled={isStopped}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Volume2 size={12} /> Last 1m
           </button>
-
-          <button
-            onClick={() => handleCapture("snapshot")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 hover:border-indigo-300 transition-all active:scale-95"
-          >
-            <Camera size={12} />
-            Snapshot
+          <button onClick={() => handleCapture("snapshot")} disabled={isStopped}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 hover:border-indigo-300 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Camera size={12} /> Snapshot
           </button>
-
           <div className="flex-1" />
-
           <span className="text-[9px] text-gray-400 font-mono tabular-nums hidden sm:block">
             Slide {pageNumber}{numPages ? ` / ${numPages}` : ""}
           </span>
@@ -433,30 +452,75 @@ export default function RecordingScreen({ lecture, onClose, onBack }) {
 
       {/* ── Slide navigation bar ─────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-t border-gray-100 rounded-b-2xl shrink-0">
-        <button
-          onClick={goPrev}
-          disabled={pageNumber <= 1}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronLeft size={16} />
-          Previous Slide
+        <button onClick={goPrev} disabled={pageNumber <= 1}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+          <ChevronLeft size={16} /> Previous Slide
         </button>
-
         <span className="text-sm font-mono text-gray-500 tabular-nums select-none">
           Slide {pageNumber} / {numPages ?? "—"}
         </span>
-
-        <button
-          onClick={goNext}
-          disabled={numPages !== null && pageNumber >= numPages}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[#2F3D56] hover:bg-[#263347] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          Next Slide
-          <ChevronRight size={16} />
+        <button onClick={goNext} disabled={numPages !== null && pageNumber >= numPages}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[#2F3D56] hover:bg-[#263347] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+          Next Slide <ChevronRight size={16} />
         </button>
       </div>
 
-      {/* ── Toast notification ────────────────────────────────────── */}
+      {/* ── End Recording confirmation modal ─────────────────────── */}
+      {showEndModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+            {/* Icon */}
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center mx-auto mb-4">
+              <StopCircle size={22} className="text-rose-500" />
+            </div>
+
+            {/* Text */}
+            <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
+              End recording?
+            </h3>
+            <p className="text-sm text-gray-500 text-center leading-relaxed mb-2">
+              This will save the current lecture recording and store it under{" "}
+              <span className="font-semibold text-gray-700">Previous Recordings</span>.
+            </p>
+
+            {/* Preview summary */}
+            <div className="rounded-xl bg-[#f8f9fb] border border-gray-200 px-4 py-3 mb-6 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Duration</span>
+                <span className="font-mono font-semibold text-gray-800">{formatTime(seconds)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Coverage</span>
+                <span className="font-semibold text-gray-800">
+                  Slide {firstSlideRef.current} → {pageNumber}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Flagged Moments</span>
+                <span className="font-semibold text-gray-800">{flaggedMoments.length}</span>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelEnd}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveRecording}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#2F3D56] hover:bg-[#263347] text-white text-sm font-semibold transition-colors shadow-sm"
+              >
+                Save Recording
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ────────────────────────────────────────────────── */}
       {toast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-[#2F3D56] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-xl pointer-events-none">
           <span className="text-green-400 text-sm">✓</span>
