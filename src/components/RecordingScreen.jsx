@@ -34,7 +34,6 @@ function formatTs(totalSec) {
   const s = (totalSec % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
-// "MM:SS" or "HH:MM:SS" → total seconds
 function tsToSec(ts = "00:00") {
   const parts = ts.split(":").map(Number);
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
@@ -43,52 +42,80 @@ function tsToSec(ts = "00:00") {
 }
 
 // ── Per-lecture simulated speed (internal only, never shown in UI) ─────────────
-// speedMult: every 1 real second → speedMult simulated seconds
-const LECTURE_SPEED = {
-  "Lecture 01 Embedded System": 2,  // x2 internal speed
-};
+const LECTURE_SPEED = { "Lecture 01 Embedded System": 2 };
 function getSpeed(label) { return LECTURE_SPEED[label] ?? 1; }
 
 // ── Transcript config per lecture ─────────────────────────────────────────────
-// Fields per line:
-//   ts    – timestamp string shown in UI (e.g. "00:12")
+// Line fields:
+//   ts    – timestamp string shown in UI  e.g. "04:30"
 //   text  – spoken text shown in UI
-//   slide – (optional) page to auto-sync the PDF viewer to (internal, not rendered)
+//   slide – (internal) page to auto-sync the PDF viewer to; never rendered
 //
-// startSlide – (optional) page to open when this lecture's recording begins
+// startSlide – (internal) page to open when recording starts; never rendered
 const TRANSCRIPTS = {
+
+  // ── Lecture 01: Slides 4 → 8 ─────────────────────────────────────────────
   "Lecture 01 Embedded System": {
-    startSlide: 7,
+    startSlide: 4,
     statusLabel: "Generating transcript live…",
     lines: [
-      { ts: "00:00", slide: 7, text: "Now let us focus on this comparison between a microcontroller and a microprocessor. This slide is very important because it explains why embedded systems usually use microcontrollers instead of only microprocessors." },
-      { ts: "00:12", slide: 7, text: "On the left side, we have the microprocessor. A microprocessor is general-purpose. That means it is designed mainly for processing different kinds of tasks, not only for controlling one specific device." },
-      { ts: "00:27", slide: 7, text: "The slide also says that a microprocessor has many instruction types and modes. This makes it powerful and flexible for general computing, but the complete system usually needs extra external hardware." },
-      { ts: "00:44", slide: 7, text: "A key point here is that the hardware of a microprocessor mainly includes the CPU only. So the CPU is stand-alone, and components such as RAM, ROM, input-output ports, and timers are separate." },
-      { ts: "01:02", slide: 7, text: "This means if we build a microprocessor-based system, we usually need to connect memory and input-output components externally. This gives flexibility, but it increases size, wiring, cost, and design complexity." },
-      { ts: "01:20", slide: 7, text: "Now look at the right side of the slide. The microcontroller is usually single-purpose. It is mainly used for control, which makes it very suitable for embedded systems." },
-      { ts: "01:35", slide: 7, text: "The most important idea is integration. In a microcontroller, the CPU, RAM, ROM, input-output ports, and timer are all placed on a single chip." },
-      { ts: "01:50", slide: 7, text: "Because these components are already inside the chip, a microcontroller-based system is usually smaller, cheaper, simpler, and easier to use for direct hardware control." },
-      { ts: "02:06", slide: 7, text: "Another important point is that microcontrollers often do not need a full operating system. In many embedded systems, the microcontroller executes one dedicated program again and again." },
-      { ts: "02:22", slide: 7, text: "So the simple comparison is this: a microprocessor is mainly a CPU for general processing, while a microcontroller is a small complete computer on one chip designed mainly for control." },
-      { ts: "02:39", slide: 7, text: "For exam or presentation purposes, remember these pairs: general-purpose versus single-purpose, processing versus control, external components versus integrated components, and larger system versus compact system." },
-      { ts: "02:58", slide: 7, text: "Now the next slide shows the same idea visually using a time and temperature system example. This will make the difference much easier to understand." },
-      { ts: "03:12", slide: 8, text: "Now we are looking at the design example slide. This slide compares an MPU-based time and temperature system with an MCU-based time and temperature system." },
-      { ts: "03:26", slide: 8, text: "On the left side, MPU means microprocessor unit. Notice that the microprocessor unit is only one block, and many other system components are placed separately around it." },
-      { ts: "03:42", slide: 8, text: "For example, the temperature sensor is separate. The analog-to-digital converter is separate. The timer is separate. The flash memory and read-write memory are also separate." },
-      { ts: "03:58", slide: 8, text: "The output devices, such as the fan, heater, and LCD, are also separate blocks. These parts communicate through the system bus." },
-      { ts: "04:13", slide: 8, text: "This left-side diagram shows why a microprocessor system can become more complex. The designer must connect several separate modules to build a full working system." },
-      { ts: "04:30", slide: 8, text: "Now compare this with the right side. MCU means microcontroller unit. Here, the microcontroller already contains several important blocks inside it." },
-      { ts: "04:45", slide: 8, text: "Inside the microcontroller block, we can see the microprocessor unit, flash memory, read-write memory, timer, and analog-to-digital converter. These are integrated inside the chip." },
-      { ts: "05:02", slide: 8, text: "The external devices are mainly the peripherals that interact with the real world, such as the temperature sensor, heater, fan, and LCD." },
-      { ts: "05:17", slide: 8, text: "This makes the microcontroller-based system more compact. It also reduces external wiring because many functions are already built into the microcontroller." },
-      { ts: "05:32", slide: 8, text: "The visual difference is simple. In the microprocessor system, many important blocks are outside the CPU. In the microcontroller system, many of those blocks are already inside the chip." },
-      { ts: "05:50", slide: 8, text: "This is why microcontrollers are usually preferred for embedded control applications. They are easier to connect to sensors and actuators, and they reduce the hardware needed to build the system." },
-      { ts: "06:07", slide: 8, text: "So if you want to explain this slide in one sentence: the MPU-based design needs many external blocks, while the MCU-based design integrates many of those blocks into one chip." },
-      { ts: "06:24", slide: 8, text: "The final takeaway is that the microprocessor gives more flexibility for general processing, but the microcontroller is better for compact, low-cost, control-based embedded systems." },
+
+      // ── Slide 4: Characteristics of Embedded Systems ──────────────────────
+      { ts: "00:00", slide: 4, text: "Now we are looking at the main characteristics of embedded systems. These characteristics explain why embedded system design is different from normal computer system design." },
+      { ts: "00:12", slide: 4, text: "The first characteristic is single-functioned. This means the embedded system is usually designed for one dedicated purpose, such as controlling a motor, reading a sensor, or managing temperature." },
+      { ts: "00:28", slide: 4, text: "The second idea is complex functionality. Even if the system has one main purpose, the internal logic may still be complex. For example, a phone, printer, or car controller may run many internal operations." },
+      { ts: "00:45", slide: 4, text: "Embedded systems are also tightly constrained. The designer usually has limits in cost, size, power consumption, speed, and memory. So the solution must be efficient, not just functional." },
+      { ts: "01:03", slide: 4, text: "Another important characteristic is reactive and real-time behavior. Reactive means the system responds to input from the environment, and real-time means the response must happen within a required time limit." },
+      { ts: "01:22", slide: 4, text: "Some embedded systems are safety-critical. In these systems, failure may harm people, equipment, or the environment. Examples include car airbags, medical devices, and industrial control systems." },
+
+      // ── Slide 5: Embedded System Design Challenges ────────────────────────
+      { ts: "01:42", slide: 5, text: "Now this slide summarizes the main design challenges. When we design an embedded system, we are not only writing code. We are balancing many engineering constraints at the same time." },
+      { ts: "01:57", slide: 5, text: "For example, the system may need to be low cost and low power, especially if it is battery powered or produced in large quantities. Small cost differences can matter a lot in mass production." },
+      { ts: "02:14", slide: 5, text: "Reliability is also very important. An embedded system is often expected to run continuously for a long time without failure, especially in cars, medical equipment, security systems, and industrial machines." },
+      { ts: "02:31", slide: 5, text: "Real-time processing is another challenge. The system must react fast enough to inputs. If it responds too late, the system may fail even if the calculation result is correct." },
+      { ts: "02:48", slide: 5, text: "Security is also becoming more important because many embedded systems are connected to networks or IoT platforms. A weak embedded device can become a serious security risk." },
+
+      // ── Slide 6: What is a Microcontroller? ───────────────────────────────
+      { ts: "03:07", slide: 6, text: "Now we move to the microcontroller. A microcontroller is often described as a computer on a chip because it combines the main computer parts inside one integrated circuit." },
+      { ts: "03:22", slide: 6, text: "Inside a microcontroller, we usually find a processor core, memory such as RAM and ROM, input and output ports, timers, counters, interrupt control, and sometimes analog-to-digital converters." },
+      { ts: "03:40", slide: 6, text: "This integration is why microcontrollers are useful in embedded systems. They allow the device to read inputs, process simple decisions, and control outputs using one small chip." },
+      { ts: "03:56", slide: 6, text: "A microcontroller usually performs a simple or dedicated task. It is not meant to replace a full computer. Instead, it is designed to control hardware efficiently." },
+      { ts: "04:12", slide: 6, text: "So before comparing microcontrollers with microprocessors, remember this basic idea: a microcontroller is a compact control device that includes processing, memory, and input-output capabilities on one chip." },
+
+      // ── Slide 7: Microcontroller vs. Microprocessor ───────────────────────
+      // Timestamps shifted +04:30 (270 s) from the original Slide 7 transcript
+      { ts: "04:30", slide: 7, text: "Now let us focus on this comparison between a microcontroller and a microprocessor. This slide is very important because it explains why embedded systems usually use microcontrollers instead of only microprocessors." },
+      { ts: "04:42", slide: 7, text: "On the left side, we have the microprocessor. A microprocessor is general-purpose. That means it is designed mainly for processing different kinds of tasks, not only for controlling one specific device." },
+      { ts: "04:57", slide: 7, text: "The slide also says that a microprocessor has many instruction types and modes. This makes it powerful and flexible for general computing, but the complete system usually needs extra external hardware." },
+      { ts: "05:14", slide: 7, text: "A key point here is that the hardware of a microprocessor mainly includes the CPU only. So the CPU is stand-alone, and components such as RAM, ROM, input-output ports, and timers are separate." },
+      { ts: "05:32", slide: 7, text: "This means if we build a microprocessor-based system, we usually need to connect memory and input-output components externally. This gives flexibility, but it increases size, wiring, cost, and design complexity." },
+      { ts: "05:50", slide: 7, text: "Now look at the right side of the slide. The microcontroller is usually single-purpose. It is mainly used for control, which makes it very suitable for embedded systems." },
+      { ts: "06:05", slide: 7, text: "The most important idea is integration. In a microcontroller, the CPU, RAM, ROM, input-output ports, and timer are all placed on a single chip." },
+      { ts: "06:20", slide: 7, text: "Because these components are already inside the chip, a microcontroller-based system is usually smaller, cheaper, simpler, and easier to use for direct hardware control." },
+      { ts: "06:36", slide: 7, text: "Another important point is that microcontrollers often do not need a full operating system. In many embedded systems, the microcontroller executes one dedicated program again and again." },
+      { ts: "06:52", slide: 7, text: "So the simple comparison is this: a microprocessor is mainly a CPU for general processing, while a microcontroller is a small complete computer on one chip designed mainly for control." },
+      { ts: "07:09", slide: 7, text: "For exam or presentation purposes, remember these pairs: general-purpose versus single-purpose, processing versus control, external components versus integrated components, and larger system versus compact system." },
+      { ts: "07:28", slide: 7, text: "Now the next slide shows the same idea visually using a time and temperature system example. This will make the difference much easier to understand." },
+
+      // ── Slide 8: Design Examples – Microcontrollers vs. Microprocessors ────
+      // Timestamps shifted +04:30 (270 s) from the original Slide 8 transcript
+      { ts: "07:42", slide: 8, text: "Now we are looking at the design example slide. This slide compares an MPU-based time and temperature system with an MCU-based time and temperature system." },
+      { ts: "07:56", slide: 8, text: "On the left side, MPU means microprocessor unit. Notice that the microprocessor unit is only one block, and many other system components are placed separately around it." },
+      { ts: "08:12", slide: 8, text: "For example, the temperature sensor is separate. The analog-to-digital converter is separate. The timer is separate. The flash memory and read-write memory are also separate." },
+      { ts: "08:28", slide: 8, text: "The output devices, such as the fan, heater, and LCD, are also separate blocks. These parts communicate through the system bus." },
+      { ts: "08:43", slide: 8, text: "This left-side diagram shows why a microprocessor system can become more complex. The designer must connect several separate modules to build a full working system." },
+      { ts: "09:00", slide: 8, text: "Now compare this with the right side. MCU means microcontroller unit. Here, the microcontroller already contains several important blocks inside it." },
+      { ts: "09:15", slide: 8, text: "Inside the microcontroller block, we can see the microprocessor unit, flash memory, read-write memory, timer, and analog-to-digital converter. These are integrated inside the chip." },
+      { ts: "09:32", slide: 8, text: "The external devices are mainly the peripherals that interact with the real world, such as the temperature sensor, heater, fan, and LCD." },
+      { ts: "09:47", slide: 8, text: "This makes the microcontroller-based system more compact. It also reduces external wiring because many functions are already built into the microcontroller." },
+      { ts: "10:02", slide: 8, text: "The visual difference is simple. In the microprocessor system, many important blocks are outside the CPU. In the microcontroller system, many of those blocks are already inside the chip." },
+      { ts: "10:20", slide: 8, text: "This is why microcontrollers are usually preferred for embedded control applications. They are easier to connect to sensors and actuators, and they reduce the hardware needed to build the system." },
+      { ts: "10:37", slide: 8, text: "So if you want to explain this slide in one sentence: the MPU-based design needs many external blocks, while the MCU-based design integrates many of those blocks into one chip." },
+      { ts: "10:54", slide: 8, text: "The final takeaway is that the microprocessor gives more flexibility for general processing, but the microcontroller is better for compact, low-cost, control-based embedded systems." },
     ],
   },
 
+  // ── Lecture 05: Programming PIC in C ─────────────────────────────────────
   "Lecture 05 Programming microcontroller C": {
     statusLabel: "Listening…",
     lines: [
@@ -228,15 +255,11 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   const [isStopped,      setIsStopped]       = useState(false);
   const [showEndModal,   setShowEndModal]    = useState(false);
 
-  // firstSlide for the saved recording coverage (start of session)
   const firstSlideRef = useRef(startSlide);
-
-  const isStoppedRef = useRef(false);
+  const isStoppedRef  = useRef(false);
   useEffect(() => { isStoppedRef.current = isStopped; }, [isStopped]);
 
-  // ── Single simulated clock ─────────────────────────────────────
-  // One interval. Drives timer display, transcript visibility, and capture timestamps.
-  // No second interval for transcript — visibility is pure derived state.
+  // ── Single simulated clock ─────────────────────────────────────────────────
   useEffect(() => {
     const id = setInterval(() => {
       if (!isStoppedRef.current && mountedRef.current) {
@@ -244,11 +267,10 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
       }
     }, 1000);
     return () => clearInterval(id);
-    // speedMult is constant for a given lecture — safe to omit from deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Derive visible transcript lines from simulated time ─────────
+  // ── Derive visible lines from simulated time (no second interval) ──────────
   const visibleLines = useMemo(() => {
     if (!hasTranscript || !transcriptCfg?.lines?.length) return [];
     return transcriptCfg.lines.filter((line) => tsToSec(line.ts) <= simSeconds);
@@ -257,23 +279,19 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   const transcriptDone = hasTranscript &&
     visibleLines.length >= (transcriptCfg?.lines?.length ?? 0);
 
-  // ── Auto-sync PDF viewer to transcript's current slide ─────────
-  // Uses the `slide` field on transcript lines (internal, never rendered).
-  // Fires only when the slide in the transcript changes (e.g. lines cross from slide 7 → 8).
+  // ── Auto-sync PDF viewer to transcript slide ───────────────────────────────
   const currentTranscriptSlide = useMemo(() => {
     if (!hasTranscript || visibleLines.length === 0) return startSlide;
-    const lastLine = visibleLines[visibleLines.length - 1];
-    return lastLine?.slide ?? startSlide;
+    return visibleLines[visibleLines.length - 1]?.slide ?? startSlide;
   }, [visibleLines, hasTranscript, startSlide]);
 
   useEffect(() => {
-    // Only auto-sync for lectures that define a startSlide (i.e. Lecture 01)
     if (hasTranscript && transcriptCfg?.startSlide != null && !isStopped) {
       setPageNumber(currentTranscriptSlide);
     }
   }, [currentTranscriptSlide, hasTranscript, transcriptCfg?.startSlide, isStopped]);
 
-  // ── Auto-scroll: only when a new line appears ───────────────────
+  // ── Auto-scroll on new line ────────────────────────────────────────────────
   useEffect(() => {
     if (visibleLines.length > prevLineCountRef.current) {
       prevLineCountRef.current = visibleLines.length;
@@ -281,7 +299,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     }
   }, [visibleLines.length]);
 
-  // ── Toast helper ────────────────────────────────────────────────
+  // ── Toast ──────────────────────────────────────────────────────────────────
   function showToast(msg) {
     if (!mountedRef.current) return;
     setToast(msg);
@@ -292,7 +310,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   }
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
-  // ── Capture handler ─────────────────────────────────────────────
+  // ── Capture ────────────────────────────────────────────────────────────────
   function handleCapture(type) {
     const toTs   = formatTs(simSeconds);
     const fromTs = type === "last30s" ? formatTs(Math.max(0, simSeconds - 30))
@@ -305,7 +323,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     showToast(type === "snapshot" ? "Snapshot saved to flagged moments" : "Saved to flagged moments");
   }
 
-  // ── End / Save flow ─────────────────────────────────────────────
+  // ── End / Save ─────────────────────────────────────────────────────────────
   function handleEndClick()  { setShowEndModal(true); }
   function handleCancelEnd() { setShowEndModal(false); }
   function handleSaveRecording() {
@@ -322,7 +340,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     });
   }
 
-  // ── Load PDF ────────────────────────────────────────────────────
+  // ── Load PDF ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!lecture?.pdfPath) { setPdfStatus("error"); return; }
     let cancelled = false;
@@ -346,7 +364,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lecture?.pdfPath]);
 
-  // ── Render PDF page ─────────────────────────────────────────────
+  // ── Render PDF page ────────────────────────────────────────────────────────
   const renderPage = useCallback(async (doc, pageNum, canvas, container) => {
     if (!doc || !canvas || !container) return;
     if (renderTaskRef.current) {
@@ -379,8 +397,6 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
     <>
       {/* ── Top bar ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-3 bg-[#2F3D56] rounded-t-2xl shrink-0">
-
-        {/* Left: back + lecture title */}
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={onBack} title="Back to overview"
             className="text-white/60 hover:text-white transition-colors shrink-0">
@@ -391,7 +407,6 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
           </span>
         </div>
 
-        {/* Center: recording status + timer */}
         <div className="flex items-center gap-2 shrink-0">
           {!isStopped ? (
             <>
@@ -409,7 +424,6 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
           </span>
         </div>
 
-        {/* Right: End Recording + Close */}
         <div className="flex items-center gap-2 shrink-0">
           {!isStopped && (
             <button onClick={handleEndClick}
@@ -451,7 +465,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         {/* Right panel: Live Transcript + Flagged Moments */}
         <div className="w-[300px] bg-white border-l border-gray-200 flex flex-col min-h-0 shrink-0">
 
-          {/* ── Transcript section ── */}
+          {/* Transcript */}
           <div className="flex-[3] flex flex-col min-h-0 border-b border-gray-200">
             <div className="px-4 py-2.5 shrink-0">
               <div className="flex items-center justify-between">
@@ -461,16 +475,11 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
                     Live Transcript
                   </span>
                 </div>
-                {/* Status badge — only text, no speed info */}
                 {hasTranscript && (
                   isStopped ? (
-                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                      Stopped
-                    </span>
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Stopped</span>
                   ) : transcriptDone ? (
-                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                      Completed
-                    </span>
+                    <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Completed</span>
                   ) : (
                     <span className="flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-500">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
@@ -483,7 +492,6 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
 
             <div className="flex-1 overflow-y-auto px-3 py-2 min-h-0">
               {!hasTranscript ? (
-                /* No transcript available for this lecture */
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3">
                   <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center">
                     <Mic size={16} className="text-gray-400" />
@@ -500,7 +508,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
                       <div key={i} className={`flex gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
                         isNewest ? "bg-blue-50 border border-blue-100" : "hover:bg-gray-50"
                       }`}>
-                        {/* Only render timestamp + text — slide/title are internal only */}
+                        {/* Only ts + text rendered — slide and title are internal only */}
                         <span className="font-mono text-[9px] text-gray-400 shrink-0 mt-0.5 tabular-nums">
                           [{line.ts}]
                         </span>
@@ -522,7 +530,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
             </div>
           </div>
 
-          {/* ── Flagged Moments section ── */}
+          {/* Flagged Moments */}
           <div className="flex-[2] flex flex-col min-h-0">
             <div className="px-4 py-2.5 shrink-0 border-b border-gray-100">
               <div className="flex items-center justify-between">
@@ -595,7 +603,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
         </button>
       </div>
 
-      {/* ── End Recording confirmation modal ─────────────────────── */}
+      {/* ── End Recording modal ──────────────────────────────────── */}
       {showEndModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
@@ -648,7 +656,7 @@ function RecordingScreenInner({ lecture, onClose, onBack, onSave }) {
   );
 }
 
-// ── Public export: inner component wrapped in error boundary ──────────────────
+// ── Public export wrapped in error boundary ───────────────────────────────────
 export default function RecordingScreen(props) {
   return (
     <RecordingErrorBoundary onClose={props.onClose} onBack={props.onBack}>
